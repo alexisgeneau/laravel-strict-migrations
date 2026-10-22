@@ -1,0 +1,100 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pest:
+    name: PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }} · ${{ matrix.database }} · ${{ matrix.stability }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+        laravel: ['12', '13']
+        stability: ['prefer-lowest', 'prefer-stable']
+        database: ['sqlite']
+        include:
+          - laravel: '12'
+            testbench: '^10.0'
+          - laravel: '13'
+            testbench: '^11.0'
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'pgsql-12', driver: 'pgsql', postgres: 'postgres:12' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'pgsql-17', driver: 'pgsql', postgres: 'postgres:17' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'mysql-8.0', driver: 'mysql', mysql: 'mysql:8.0' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'mysql-8.4', driver: 'mysql', mysql: 'mysql:8.4' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'mysql-9.7', driver: 'mysql', mysql: 'mysql:9.7' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'mariadb-10.6', driver: 'mariadb', mysql: 'mariadb:10.6', health: 'healthcheck.sh --connect --innodb_initialized' }
+          - { php: '8.4', laravel: '13', testbench: '^11.0', stability: 'prefer-stable', database: 'mariadb-11.8', driver: 'mariadb', mysql: 'mariadb:11.8', health: 'healthcheck.sh --connect --innodb_initialized' }
+        exclude:
+          - php: '8.2'
+            laravel: '13'
+
+    services:
+      mysql:
+        image: ${{ matrix.mysql || 'mysql:8.4' }}
+        env:
+          MYSQL_DATABASE: strict
+          MYSQL_ROOT_PASSWORD: secret
+          MARIADB_DATABASE: strict
+          MARIADB_ROOT_PASSWORD: secret
+        ports:
+          - 3306:3306
+        options: --health-cmd="${{ matrix.health || 'mysqladmin ping -h 127.0.0.1 -psecret' }}" --health-interval=10s --health-timeout=5s --health-retries=10
+      postgres:
+        image: ${{ matrix.postgres || 'postgres:17' }}
+        env:
+          POSTGRES_DB: strict
+          POSTGRES_USER: strict
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: --health-cmd="pg_isready -U strict" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, pdo, pdo_sqlite, pdo_mysql, pdo_pgsql
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "illuminate/contracts:^${{ matrix.laravel }}.0" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --${{ matrix.stability }} --prefer-dist --no-interaction
+
+      - name: Run tests
+        run: vendor/bin/pest --ci
+        env:
+          STRICT_MIGRATIONS_TEST_DB: ${{ matrix.driver || 'sqlite' }}
+          STRICT_MIGRATIONS_TEST_DB_HOST: 127.0.0.1
+          STRICT_MIGRATIONS_TEST_DB_PORT: ${{ matrix.driver == 'pgsql' && '5432' || '3306' }}
+          STRICT_MIGRATIONS_TEST_DB_DATABASE: strict
+          STRICT_MIGRATIONS_TEST_DB_USERNAME: ${{ matrix.driver == 'pgsql' && 'strict' || 'root' }}
+          STRICT_MIGRATIONS_TEST_DB_PASSWORD: secret
+
+  static:
+    name: Static analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+      - name: PHPStan
+        run: vendor/bin/phpstan analyse --no-progress --memory-limit=1G

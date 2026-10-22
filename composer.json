@@ -1,0 +1,69 @@
+{
+    "name": "alexisgeneau/laravel-strict-migrations",
+    "description": "Refuse the Laravel migrations that would lock a production table or break the code still running during a deployment, with the safe way to write them.",
+    "keywords": [
+        "laravel",
+        "migrations",
+        "database",
+        "schema",
+        "zero-downtime",
+        "postgresql",
+        "mysql",
+        "mariadb",
+        "locks"
+    ],
+    "homepage": "https://github.com/alexisgeneau/laravel-strict-migrations",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Alexis Geneau",
+            "email": "contact@cote-dev.fr"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^12.23|^13.0",
+        "illuminate/contracts": "^12.23|^13.0",
+        "illuminate/database": "^12.23|^13.0",
+        "illuminate/support": "^12.23|^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0",
+        "pestphp/pest-plugin-laravel": "^3.0|^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "StrictMigrations\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "StrictMigrations\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "StrictMigrations\\StrictMigrationsServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "lint": "pint",
+        "analyse": "phpstan analyse --memory-limit=1G"
+    },
+    "config": {
+        "process-timeout": 0,
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
