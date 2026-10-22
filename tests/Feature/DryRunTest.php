@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Connection;
+use Illuminate\Database\PostgresConnection;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -191,4 +193,18 @@ it('leaves the connection as it found it', function () {
 
     expect(DB::connection()->getPdo())->toBe($pdo)
         ->and(DB::table('orders')->count())->toBe(5);
+});
+
+it('works with a connection class a package substitutes, as tpetry/laravel-postgresql-enhanced does', function () {
+    Connection::resolverFor('pgsql', fn ($pdo, $database, $prefix, $config) => new class($pdo, $database, $prefix, $config) extends PostgresConnection {});
+    DB::purge();
+    $this->table('orders', rows: 6);
+
+    $analysis = $this->analyze(fn () => Schema::table('orders', fn (Blueprint $table) => $table->index('customer_id')));
+
+    expect(get_parent_class(DB::connection()))->toBe(PostgresConnection::class)
+        ->and(verdicts($analysis))->toBe(['unsafe index'])
+        ->and(Schema::hasIndex('orders', ['customer_id']))->toBeFalse();
+})->skip(engine() !== Engine::Postgres, 'PostgreSQL only.')->after(function () {
+    Closure::bind(fn () => static::$resolvers = [], null, Connection::class)();
 });

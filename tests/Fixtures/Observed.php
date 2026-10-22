@@ -11,6 +11,8 @@ final class Observed
 {
     public static ?string $lockTimeout = null;
 
+    public static ?int $transactionLevel = null;
+
     public static function lockTimeout(): void
     {
         self::$lockTimeout = self::currentLockTimeout();

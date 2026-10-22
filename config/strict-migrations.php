@@ -17,7 +17,7 @@ return [
 
     'check_down' => false,
 
-    // Below this many rows, a statement that would block a large table is reported as a warning.
+    // At or below this many rows, a statement that would block a large table is reported as a warning.
     'small_table_rows' => 10_000,
 
     // rolling: the previous release keeps serving while the migrations run, so dropping or renaming

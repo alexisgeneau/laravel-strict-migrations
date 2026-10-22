@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use StrictMigrations\Database\Engine;
 use StrictMigrations\Exceptions\UnsafeMigration;
+use StrictMigrations\Tests\Fixtures\Observed;
 
 beforeEach(function () {
     $this->table('orders', rows: 6);
@@ -247,3 +250,52 @@ it('puts the findings in the exception when there is no output to report them', 
         '2030_01_01_000002_drop_notes was refused before any of its statements ran. Dropping orders.notes breaks the code that still reads or writes it while the deployment runs.',
     );
 });
+
+it('stays quiet on migrate:fresh, which creates every table it changes', function () {
+    $this->migration('2030_01_01_000001_create_invoices', <<<'PHP'
+            public function up(): void
+            {
+                Schema::create('invoices', function (Blueprint $table) {
+                    $table->id();
+                    $table->string('number');
+                    $table->text('notes')->nullable();
+                });
+            }
+        PHP);
+    $this->migration('2030_01_01_000002_rework_invoices', <<<'PHP'
+            public function up(): void
+            {
+                Schema::table('invoices', function (Blueprint $table) {
+                    $table->index('number');
+                    $table->dropColumn('notes');
+                });
+            }
+        PHP);
+    $this->command('migrate');
+
+    $outcome = $this->command('migrate:fresh');
+
+    expect($outcome->exception)->toBeNull()
+        ->and($outcome->output)->not->toContain('UNSAFE')->not->toContain('WARN')
+        ->and($this->ran())->toBe(['2030_01_01_000001_create_invoices', '2030_01_01_000002_rework_invoices']);
+});
+
+it('keeps the transaction the migrator opens on PostgreSQL, which undoes a migration that fails', function () {
+    Observed::$transactionLevel = null;
+    $this->migration('2030_01_01_000001_add_currency', <<<'PHP'
+            public function up(): void
+            {
+                \StrictMigrations\Tests\Fixtures\Observed::$transactionLevel = DB::transactionLevel();
+                Schema::table('orders', fn (Blueprint $table) => $table->string('currency', 3)->nullable());
+                DB::table('orders')->insert(['id' => 1, 'email' => 'duplicate@example.com']);
+            }
+        PHP);
+
+    $outcome = $this->command('migrate');
+
+    expect($outcome->exception)->toBeInstanceOf(QueryException::class)
+        ->and(Observed::$transactionLevel)->toBe(1)
+        ->and(Schema::hasColumn('orders', 'currency'))->toBeFalse()
+        ->and($this->ran())->toBe([])
+        ->and(DB::transactionLevel())->toBe(0);
+})->skip(engine() !== Engine::Postgres, 'PostgreSQL only: the migrator wraps no other engine in a transaction.');
